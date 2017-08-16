@@ -18,6 +18,7 @@ import datetime
 import tempfile
 
 LOG_OUTPUT_FORMATS = ['stdout', 'log', 'json', 'tensorboard']
+TIMESTAMP =  datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
 
 DEBUG = 10
 INFO = 20
@@ -100,8 +101,7 @@ class TensorBoardOutputFormat(OutputFormat):
     Dumps key/value pairs into TensorBoard's numeric format.
     """
     def __init__(self, dir):
-        timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
-        self.dir = osp.join(osp.abspath(dir), timestamp)
+        self.dir = dir
         os.makedirs(self.dir, exist_ok=True)
 
         self.step = 1
@@ -139,13 +139,13 @@ def make_output_format(format, ev_dir):
     if format == 'stdout':
         return HumanOutputFormat(sys.stdout)
     elif format == 'log':
-        log_file = open(osp.join(ev_dir, 'log.txt'), 'wt')
+        log_file = open(osp.join(ev_dir, '{}.txt'.format(TIMESTAMP)), 'w')
         return HumanOutputFormat(log_file)
     elif format == 'json':
-        json_file = open(osp.join(ev_dir, 'progress.json'), 'wt')
+        json_file = open(osp.join(ev_dir, '{}.json'.format(TIMESTAMP)), 'w')
         return JSONOutputFormat(json_file)
     elif format == 'tensorboard':
-        return TensorBoardOutputFormat(osp.join(ev_dir, 'tb'))
+        return TensorBoardOutputFormat(osp.join(ev_dir, 'tb', TIMESTAMP))
     else:
         raise ValueError('Unknown format specified: %s' % (format,))
 
