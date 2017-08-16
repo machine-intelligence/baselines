@@ -168,6 +168,7 @@ def learn(env,
 
     sess = U.make_session(num_cpu=num_cpu)
     sess.__enter__()
+    logger.session().__enter__()
 
     def make_obs_ph(name):
         return U.BatchInput(env.observation_space.shape, name=name)

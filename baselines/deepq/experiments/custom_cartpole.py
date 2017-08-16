@@ -11,6 +11,7 @@ from baselines import deepq
 from baselines.deepq.replay_buffer import ReplayBuffer
 from baselines.common.schedules import LinearSchedule
 
+logger.session().__enter__()
 
 def model(inpt, num_actions, scope, reuse=False):
     """This model takes as input an observation and returns values of all actions."""
@@ -61,6 +62,8 @@ if __name__ == '__main__':
             if is_solved:
                 # Show off the result
                 env.render()
+                logger.log('Mean ep reward {}'.format(np.mean(episode_rewards[-101:-1])))
+                break
             else:
                 # Minimize the error in Bellman's equation on a batch sampled from replay buffer.
                 if t > 1000:

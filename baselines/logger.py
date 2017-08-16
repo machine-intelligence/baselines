@@ -100,13 +100,16 @@ class TensorBoardOutputFormat(OutputFormat):
     Dumps key/value pairs into TensorBoard's numeric format.
     """
     def __init__(self, dir):
-        os.makedirs(dir, exist_ok=True)
-        self.dir = dir
+        timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+        self.dir = osp.join(osp.abspath(dir), timestamp)
+        os.makedirs(self.dir, exist_ok=True)
+
         self.step = 1
         prefix = 'events'
-        path = osp.join(osp.abspath(dir), prefix)
+
+        path = osp.join(osp.abspath(self.dir), prefix)
         import tensorflow as tf
-        from tensorflow.python import pywrap_tensorflow        
+        from tensorflow.python import pywrap_tensorflow
         from tensorflow.core.util import event_pb2
         from tensorflow.python.util import compat
         self.tf = tf
@@ -277,7 +280,7 @@ class session(object):
         if dir is None:
             dir = os.getenv('OPENAI_LOGDIR')
         if dir is None:
-            dir = osp.join(tempfile.gettempdir(), 
+            dir = osp.join(tempfile.gettempdir(),
                 datetime.datetime.now().strftime("openai-%Y-%m-%d-%H-%M-%S-%f"))
         self.dir = dir
         if format_strs is None:
@@ -288,7 +291,7 @@ class session(object):
 
     def __enter__(self):
         os.makedirs(self.evaluation_dir(), exist_ok=True)
-        output_formats = [make_output_format(f, self.evaluation_dir()) 
+        output_formats = [make_output_format(f, self.evaluation_dir())
                             for f in LOG_OUTPUT_FORMATS]
         Logger.CURRENT = Logger(dir=self.dir, output_formats=output_formats)
         os.environ['OPENAI_LOGDIR'] = self.evaluation_dir()
