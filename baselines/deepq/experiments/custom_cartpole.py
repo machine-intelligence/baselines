@@ -3,15 +3,65 @@ import itertools
 import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.layers as layers
-
+from keras.models import load_model
 import baselines.common.tf_util as U
+from gym import spaces
 
 from baselines import logger
 from baselines import deepq
 from baselines.deepq.replay_buffer import ReplayBuffer
 from baselines.common.schedules import LinearSchedule
+from baselines.common.atari_wrappers import FrameStack
 
-logger.session().__enter__()
+
+class RenderWrapper(gym.ObservationWrapper):
+    def __init__(self, env, w, h):
+        """Buffer observations and stack across channels (last axis)."""
+        gym.Wrapper.__init__(self, env)
+        self.observation_space = spaces.Box(low=0, high=255, shape=(w, h, 3))
+
+    def _observation(self, obs):
+        return self.env.render(mode='rgb_array')
+
+
+class DownsampleWrapper(gym.ObservationWrapper):
+    """Resize image, grayscale"""
+
+    def __init__(self, env, scale):
+        """Buffer observations and stack across channels (last axis)."""
+        gym.Wrapper.__init__(self, env)
+        self.scale = scale
+        old_shape = env.observation_space.shape
+        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(
+            old_shape[0] // scale, old_shape[1] // scale, 1))
+
+    def _observation(self, obs):
+        return np.uint8(
+            resize(np.mean(obs, axis=-1), (obs.shape[0] // self.scale, obs.shape[1] // self.scale), mode='edge'))
+
+
+class EncodeWrapper(gym.ObservationWrapper):
+    """Load pre-trained environment model and use it to encode each observation."""
+    def __init__(self, env, k):
+        """Buffer observations and stack across channels (last axis)."""
+        gym.Wrapper.__init__(self, env)
+        self.model = load_model('autoencoder.h5')
+
+        self.encoder_model = Model(model.input, model.get_layer('bottleneck').output, name='encoder')
+
+
+        self.observation_space = spaces.Box(
+            low=-10, high=10, shape=(
+                # take all actions as a batch, skip model batch dim
+                self.action_space.n, encoder_model.output.shape.as_list()[1:], k))
+
+
+    def _observation(self, obs):
+        obs = 1 - obs[..., :96, :144, :] / 255.
+        return encoder_model.predict(
+            [np.stack([ob, ob]),
+             np.arange(self.action_space.n)])
+
 
 def model(inpt, num_actions, scope, reuse=False):
     """This model takes as input an observation and returns values of all actions."""
@@ -23,9 +73,15 @@ def model(inpt, num_actions, scope, reuse=False):
 
 
 if __name__ == '__main__':
+    logger.session().__enter__()
+
     with U.make_session(8):
         # Create the environment
         env = gym.make("CartPole-v0")
+        env = RenderWrapper(env, 400, 600)
+        env = DownsampleWrapper(env, 4)
+        env = FrameStack(env)
+        # env = EncodeWrapper(env)
         # Create all the functions necessary to train the model
         act, train, update_target, debug = deepq.build_train(
             make_obs_ph=lambda name: U.BatchInput(env.observation_space.shape, name=name),
