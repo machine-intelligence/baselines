@@ -153,7 +153,7 @@ class FrameStack(gym.Wrapper):
 
     def _observation(self):
         assert len(self.frames) == self.k
-        return np.concatenate(self.frames, axis=2)
+        return np.moveaxis(np.stack(self.frames), 0, -1)
 
 def wrap_deepmind(env, episode_life=True, clip_rewards=True):
     """Configure environment for DeepMind-style Atari.

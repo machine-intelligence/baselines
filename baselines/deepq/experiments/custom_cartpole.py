@@ -6,6 +6,8 @@ import tensorflow.contrib.layers as layers
 from keras.models import load_model
 import baselines.common.tf_util as U
 from gym import spaces
+from skimage.transform import resize
+
 
 from baselines import logger
 from baselines import deepq
@@ -62,7 +64,8 @@ class EncodeWrapper(gym.ObservationWrapper):
             [np.stack([ob, ob]),
              np.arange(self.action_space.n)])
 
-
+# TODO: make this a commandline arg
+FROM_PIXELS = True
 def model(inpt, num_actions, scope, reuse=False):
     """This model takes as input an observation and returns values of all actions."""
     with tf.variable_scope(scope, reuse=reuse):
@@ -74,13 +77,19 @@ def model(inpt, num_actions, scope, reuse=False):
 
 if __name__ == '__main__':
     logger.session().__enter__()
+    if FROM_PIXELS:
+        model = deepq.models.cnn_to_mlp(
+            convs=[(32, 8, 4), (64, 4, 2), (64, 3, 1)],
+            hiddens=[256],
+            dueling=False
+        )
 
     with U.make_session(8):
         # Create the environment
         env = gym.make("CartPole-v0")
         env = RenderWrapper(env, 400, 600)
         env = DownsampleWrapper(env, 4)
-        env = FrameStack(env)
+        env = FrameStack(env, 4)
         # env = EncodeWrapper(env)
         # Create all the functions necessary to train the model
         act, train, update_target, debug = deepq.build_train(
