@@ -76,7 +76,7 @@ def model(inpt, num_actions, scope, reuse=False):
 
 
 if __name__ == '__main__':
-    logger.session().__enter__()
+    logger.configure()
     if FROM_PIXELS:
         model = deepq.models.cnn_to_mlp(
             convs=[(32, 8, 4), (64, 4, 2), (64, 3, 1)],
