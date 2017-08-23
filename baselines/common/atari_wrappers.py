@@ -3,6 +3,7 @@ from collections import deque
 from PIL import Image
 import gym
 from gym import spaces
+from skimage.transform import resize
 
 
 class NoopResetEnv(gym.Wrapper):
@@ -21,7 +22,7 @@ class NoopResetEnv(gym.Wrapper):
         if self.override_num_noops is not None:
             noops = self.override_num_noops
         else:
-            noops = self.unwrapped.np_random.randint(1, self.noop_max + 1) #pylint: disable=E1101
+            noops = self.unwrapped.np_random.randint(1, self.noop_max + 1)  #pylint: disable=E1101
         assert noops > 0
         obs = None
         for _ in range(noops):
@@ -170,3 +171,29 @@ def wrap_deepmind(env, episode_life=True, clip_rewards=True):
     if clip_rewards:
         env = ClipRewardEnv(env)
     return env
+
+
+class RenderWrapper(gym.ObservationWrapper):
+    def __init__(self, env, w, h):
+        """Buffer observations and stack across channels (last axis)."""
+        gym.Wrapper.__init__(self, env)
+        self.observation_space = spaces.Box(low=0, high=255, shape=(w, h, 3))
+
+    def _observation(self, obs):
+        return self.env.render(mode='rgb_array')
+
+
+class DownsampleWrapper(gym.ObservationWrapper):
+    """Resize image, grayscale"""
+
+    def __init__(self, env, scale):
+        """Buffer observations and stack across channels (last axis)."""
+        gym.Wrapper.__init__(self, env)
+        self.scale = scale
+        old_shape = env.observation_space.shape
+        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(
+            old_shape[0] // scale, old_shape[1] // scale, 1))
+
+    def _observation(self, obs):
+        return np.uint8(
+            resize(np.mean(obs, axis=-1), (obs.shape[0] // self.scale, obs.shape[1] // self.scale), mode='edge'))

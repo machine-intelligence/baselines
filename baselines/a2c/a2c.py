@@ -1,10 +1,12 @@
 import os.path as osp
 import gym
 import time
+import itertools
 import joblib
 import logging
 import numpy as np
 import tensorflow as tf
+from collections import deque
 from baselines import logger
 
 from baselines.common import set_global_seeds, explained_variance
@@ -94,10 +96,16 @@ class Runner(object):
     def __init__(self, env, model, nsteps=5, nstack=4, gamma=0.99):
         self.env = env
         self.model = model
-        nh, nw, nc = env.observation_space.shape
         nenv = env.num_envs
-        self.batch_ob_shape = (nenv*nsteps, nh, nw, nc*nstack)
-        self.obs = np.zeros((nenv, nh, nw, nc*nstack), dtype=np.uint8)
+        self.from_pixels = len(env.observation_space.shape) == 3
+        if self.from_pixels:
+            nh, nw, nc = env.observation_space.shape
+            self.batch_ob_shape = (nenv * nsteps, nh, nw, nc * nstack)
+            self.obs = np.zeros((nenv, nh, nw, nc * nstack), dtype=np.uint8)
+        else:
+            self.batch_ob_shape = (nenv * nsteps,) + env.observation_space.shape
+            self.obs = np.zeros((nenv,) + env.observation_space.shape)
+
         obs = env.reset()
         self.update_obs(obs)
         self.gamma = gamma
@@ -106,6 +114,9 @@ class Runner(object):
         self.dones = [False for _ in range(nenv)]
 
     def update_obs(self, obs):
+        if not self.from_pixels:
+            self.obs = obs
+            return
         # Do frame-stacking here instead of the FrameStack wrapper to reduce
         # IPC overhead
         self.obs = np.roll(self.obs, shift=-1, axis=3)
@@ -130,7 +141,10 @@ class Runner(object):
             mb_rewards.append(rewards)
         mb_dones.append(self.dones)
         #batch of steps to batch of rollouts
-        mb_obs = np.asarray(mb_obs, dtype=np.uint8).swapaxes(1, 0).reshape(self.batch_ob_shape)
+        if self.from_pixels:
+            mb_obs = np.asarray(mb_obs, dtype=np.uint8).swapaxes(1, 0).reshape(self.batch_ob_shape)
+        else:
+            mb_obs = np.asarray(mb_obs, dtype=np.float32).swapaxes(1, 0).reshape(self.batch_ob_shape)
         mb_rewards = np.asarray(mb_rewards, dtype=np.float32).swapaxes(1, 0)
         mb_actions = np.asarray(mb_actions, dtype=np.int32).swapaxes(1, 0)
         mb_values = np.asarray(mb_values, dtype=np.float32).swapaxes(1, 0)
@@ -165,13 +179,22 @@ def learn(policy, env, seed, nsteps=5, nstack=4, total_timesteps=int(80e6), vf_c
         max_grad_norm=max_grad_norm, lr=lr, alpha=alpha, epsilon=epsilon, total_timesteps=total_timesteps, lrschedule=lrschedule)
     runner = Runner(env, model, nsteps=nsteps, nstack=nstack, gamma=gamma)
 
-    nbatch = nenvs*nsteps
+    sum_rewards = np.zeros((nenvs,))
+    episode_rewards = deque(maxlen=100)
+    nbatch = nenvs * nsteps
     tstart = time.time()
-    for update in range(1, total_timesteps//nbatch+1):
+    for update in itertools.count():
         obs, states, rewards, masks, actions, values = runner.run()
         policy_loss, value_loss, policy_entropy = model.train(obs, states, rewards, masks, actions, values)
         nseconds = time.time()-tstart
         fps = int((update*nbatch)/nseconds)
+        # reward bookkeeping. use inverted masks as proxy for raw reward
+        # TODO: fix this approximation where we consider a `done` anywhere in the rollout to be sufficient.
+        sum_rewards += np.sum(np.reshape(1-masks, (nenvs, nsteps)), axis=1)
+        reshaped_masks = np.reshape(masks, (nenvs, nsteps))
+        episode_rewards.extend(sum_rewards[np.any(reshaped_masks, axis=1)])
+        sum_rewards[np.any(reshaped_masks, axis=1)] = 0
+
         if update % log_interval == 0 or update == 1:
             ev = explained_variance(values, rewards)
             logger.record_tabular("nupdates", update)
@@ -180,7 +203,11 @@ def learn(policy, env, seed, nsteps=5, nstack=4, total_timesteps=int(80e6), vf_c
             logger.record_tabular("policy_entropy", float(policy_entropy))
             logger.record_tabular("value_loss", float(value_loss))
             logger.record_tabular("explained_variance", float(ev))
+            logger.record_tabular("mean episode reward", np.mean(episode_rewards))
             logger.dump_tabular()
+
+            if np.mean(episode_rewards) >= 195:
+                break
     env.close()
 
 def main():

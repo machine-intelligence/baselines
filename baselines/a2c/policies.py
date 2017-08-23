@@ -88,6 +88,37 @@ class LstmPolicy(object):
         self.step = step
         self.value = value
 
+class FcPolicy(object):
+
+    def __init__(self, sess, ob_space, ac_space, nenv, nsteps, nstack, reuse=False):
+        nbatch = nenv*nsteps
+        ob_shape = (nbatch,) + ob_space.shape
+        nact = ac_space.n
+        X = tf.placeholder(tf.float32, ob_shape) #obs
+        with tf.variable_scope("model", reuse=reuse):
+            h1 = fc(X, 'fc1', nh=64, init_scale=np.sqrt(2))
+            h2 = fc(h1, 'fc2', nh=64, init_scale=np.sqrt(2))
+            pi = fc(h2, 'pi', nact, act=lambda x:x)
+            vf = fc(h2, 'v', 1, act=lambda x:x)
+
+        v0 = vf[:, 0]
+        a0 = sample(pi)
+        self.initial_state = [] #not stateful
+
+        def step(ob, *_args, **_kwargs):
+            a, v = sess.run([a0, v0], {X:ob})
+            return a, v, [] #dummy state
+
+        def value(ob, *_args, **_kwargs):
+            return sess.run(v0, {X:ob})
+
+        self.X = X
+        self.pi = pi
+        self.vf = vf
+        self.step = step
+        self.value = value
+
+
 class CnnPolicy(object):
 
     def __init__(self, sess, ob_space, ac_space, nenv, nsteps, nstack, reuse=False):

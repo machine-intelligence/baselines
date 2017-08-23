@@ -15,10 +15,12 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu):
         def _thunk():
             env = gym.make(env_id)
             env.seed(seed + rank)
-            env = bench.Monitor(env, os.path.join(logger.get_dir(), "{}.monitor.json".format(rank)))
+            #env = bench.Monitor(env, os.path.join(logger.get_dir(), "{}.monitor.json".format(rank)))
             gym.logger.setLevel(logging.WARN)
             return wrap_deepmind(env)
         return _thunk
+
+    logger.configure()
 
     set_global_seeds(seed)
     env = SubprocVecEnv([make_env(i) for i in range(num_cpu)])
