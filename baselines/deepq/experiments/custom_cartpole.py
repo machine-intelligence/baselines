@@ -65,7 +65,7 @@ class EncodeWrapper(gym.ObservationWrapper):
              np.arange(self.action_space.n)]))
 
 # TODO: make this a commandline arg
-FROM_PIXELS = True
+FROM_PIXELS = False
 def model(inpt, num_actions, scope, reuse=False):
     """This model takes as input an observation and returns values of all actions."""
     with tf.variable_scope(scope, reuse=reuse):
@@ -87,11 +87,11 @@ if __name__ == '__main__':
     with U.make_session(8):
         # Create the environment
         env = gym.make("CartPole-v0")
-        env = RenderWrapper(env, 400, 600)
-        env = DownsampleWrapper(env, 4)
-        env = FrameStack(env, 4)
-        if not FROM_PIXELS:
-            env = EncodeWrapper(env)
+        if FROM_PIXELS:
+            env = RenderWrapper(env, 400, 600)
+            env = DownsampleWrapper(env, 4)
+            env = FrameStack(env, 4)
+            #env = EncodeWrapper(env)
         # Create all the functions necessary to train the model
         act, train, update_target, debug = deepq.build_train(
             make_obs_ph=lambda name: U.BatchInput(env.observation_space.shape, name=name),
@@ -112,6 +112,7 @@ if __name__ == '__main__':
 
         episode_rewards = deque([0.], maxlen=100)
         episode_loss = deque([0.], maxlen=100)
+        num_eps = 0
         obs = env.reset()
         for t in itertools.count():
             # Take action and update exploration to the newest value
@@ -126,8 +127,9 @@ if __name__ == '__main__':
                 obs = env.reset()
                 episode_rewards.append(0)
                 episode_loss.append(0)
+                num_eps += 1
 
-            is_solved = t > 100 and np.mean(episode_rewards) >= 200
+            is_solved = t > 100 and np.mean(episode_rewards) >= 195
             if is_solved:
                 # Show off the result
                 env.render()
@@ -136,7 +138,7 @@ if __name__ == '__main__':
             else:
                 # Minimize the error in Bellman's equation on a batch sampled from replay buffer.
                 if t > 1000:
-                    obses_t, actions, rewards, obses_tp1, dones = replay_buffer.sample(64)
+                    obses_t, actions, rewards, obses_tp1, dones = replay_buffer.sample(32)
                     batch_loss = train(obses_t, actions, rewards, obses_tp1, dones, np.ones_like(rewards))
                     episode_loss[-1] += np.mean(batch_loss)
 
@@ -144,7 +146,7 @@ if __name__ == '__main__':
                 if t % 1000 == 0:
                     update_target()
 
-            if done and len(episode_rewards) % 10 == 0:
+            if done and num_eps % 10 == 0:
                 logger.record_tabular("steps", t)
                 logger.record_tabular("loss", np.mean(episode_loss))
                 logger.record_tabular("mean episode reward", round(np.mean(episode_rewards), 1))
