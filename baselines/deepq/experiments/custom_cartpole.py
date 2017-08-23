@@ -3,10 +3,11 @@ import itertools
 import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.layers as layers
-from keras.models import load_model
+from keras.models import load_model, Model
 import baselines.common.tf_util as U
 from gym import spaces
 from skimage.transform import resize
+from collections import deque
 
 
 from baselines import logger
@@ -44,25 +45,24 @@ class DownsampleWrapper(gym.ObservationWrapper):
 
 class EncodeWrapper(gym.ObservationWrapper):
     """Load pre-trained environment model and use it to encode each observation."""
-    def __init__(self, env, k):
+    def __init__(self, env):
         """Buffer observations and stack across channels (last axis)."""
         gym.Wrapper.__init__(self, env)
         self.model = load_model('autoencoder.h5')
 
-        self.encoder_model = Model(model.input, model.get_layer('bottleneck').output, name='encoder')
+        self.encoder_model = Model(self.model.input, self.model.get_layer('bottleneck').output, name='encoder')
 
-
-        self.observation_space = spaces.Box(
-            low=-10, high=10, shape=(
-                # take all actions as a batch, skip model batch dim
-                self.action_space.n, encoder_model.output.shape.as_list()[1:], k))
+        # take all actions as a batch, skip model batch dim
+        shape = (self.action_space.n  * self.encoder_model.output.shape.as_list()[1],)
+        self.observation_space = spaces.Box(low=-3e38, high=3e38, shape=shape)
 
 
     def _observation(self, obs):
         obs = 1 - obs[..., :96, :144, :] / 255.
-        return encoder_model.predict(
-            [np.stack([ob, ob]),
-             np.arange(self.action_space.n)])
+        obs = np.moveaxis(obs, -1, 0)[..., None]
+        return np.concatenate(self.encoder_model.predict(
+            [np.stack([obs, obs]),
+             np.arange(self.action_space.n)]))
 
 # TODO: make this a commandline arg
 FROM_PIXELS = True
@@ -80,7 +80,7 @@ if __name__ == '__main__':
     if FROM_PIXELS:
         model = deepq.models.cnn_to_mlp(
             convs=[(32, 8, 4), (64, 4, 2), (64, 3, 1)],
-            hiddens=[256],
+            hiddens=[64],
             dueling=False
         )
 
@@ -90,7 +90,8 @@ if __name__ == '__main__':
         env = RenderWrapper(env, 400, 600)
         env = DownsampleWrapper(env, 4)
         env = FrameStack(env, 4)
-        # env = EncodeWrapper(env)
+        if not FROM_PIXELS:
+            env = EncodeWrapper(env)
         # Create all the functions necessary to train the model
         act, train, update_target, debug = deepq.build_train(
             make_obs_ph=lambda name: U.BatchInput(env.observation_space.shape, name=name),
@@ -102,14 +103,15 @@ if __name__ == '__main__':
         replay_buffer = ReplayBuffer(50000)
         # Create the schedule for exploration starting from 1 (every action is random) down to
         # 0.02 (98% of actions are selected according to values predicted by the model).
-        exploration = LinearSchedule(schedule_timesteps=2e6 if FROM_PIXELS else 1e4,
+        exploration = LinearSchedule(schedule_timesteps=2e4 if FROM_PIXELS else 1e4,
                                      initial_p=1.0, final_p=0.02)
 
         # Initialize the parameters and copy them to the target network.
         U.initialize()
         update_target()
 
-        episode_rewards = [0.0]
+        episode_rewards = deque([0.], maxlen=100)
+        episode_loss = deque([0.], maxlen=100)
         obs = env.reset()
         for t in itertools.count():
             # Take action and update exploration to the newest value
@@ -123,25 +125,28 @@ if __name__ == '__main__':
             if done:
                 obs = env.reset()
                 episode_rewards.append(0)
+                episode_loss.append(0)
 
-            is_solved = t > 100 and np.mean(episode_rewards[-101:-1]) >= 200
+            is_solved = t > 100 and np.mean(episode_rewards) >= 200
             if is_solved:
                 # Show off the result
                 env.render()
-                logger.log('Mean ep reward {}'.format(np.mean(episode_rewards[-101:-1])))
+                logger.log('Mean ep reward {}'.format(np.mean(episode_rewards)))
                 break
             else:
                 # Minimize the error in Bellman's equation on a batch sampled from replay buffer.
                 if t > 1000:
-                    obses_t, actions, rewards, obses_tp1, dones = replay_buffer.sample(32)
-                    train(obses_t, actions, rewards, obses_tp1, dones, np.ones_like(rewards))
+                    obses_t, actions, rewards, obses_tp1, dones = replay_buffer.sample(64)
+                    batch_loss = train(obses_t, actions, rewards, obses_tp1, dones, np.ones_like(rewards))
+                    episode_loss[-1] += np.mean(batch_loss)
+
                 # Update target network periodically.
                 if t % 1000 == 0:
                     update_target()
 
             if done and len(episode_rewards) % 10 == 0:
                 logger.record_tabular("steps", t)
-                logger.record_tabular("episodes", len(episode_rewards))
-                logger.record_tabular("mean episode reward", round(np.mean(episode_rewards[-101:-1]), 1))
+                logger.record_tabular("loss", np.mean(episode_loss))
+                logger.record_tabular("mean episode reward", round(np.mean(episode_rewards), 1))
                 logger.record_tabular("% time spent exploring", int(100 * exploration.value(t)))
                 logger.dump_tabular()
