@@ -14,15 +14,15 @@ from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines.common.atari_wrappers import wrap_deepmind
 
 from baselines.a2c.utils import discount_with_dones
-from baselines.a2c.utils import Scheduler, make_path, find_trainable_variables
+from baselines.a2c.utils import Scheduler, make_path, find_trainable_variables, EpisodeStats
 from baselines.a2c.policies import CnnPolicy
 from baselines.a2c.utils import cat_entropy, mse
 
 class Model(object):
 
     def __init__(self, policy, ob_space, ac_space, nenvs, nsteps, nstack, num_procs,
-            ent_coef=0.01, vf_coef=0.5, max_grad_norm=0.5, lr=7e-4,
-            alpha=0.99, epsilon=1e-5, total_timesteps=int(80e6), lrschedule='linear'):
+            ent_coef=0.01, vf_coef=0.5, max_grad_norm=0.5, lr=1e-3,
+            alpha=0.99, epsilon=1e-8, total_timesteps=int(80e6), lrschedule='linear'):
         config = tf.ConfigProto(allow_soft_placement=True,
                                 intra_op_parallelism_threads=num_procs,
                                 inter_op_parallelism_threads=num_procs)
@@ -50,7 +50,7 @@ class Model(object):
         if max_grad_norm is not None:
             grads, grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
         grads = list(zip(grads, params))
-        trainer = tf.train.RMSPropOptimizer(learning_rate=LR, decay=alpha, epsilon=epsilon)
+        trainer = tf.train.AdamOptimizer(learning_rate=LR, epsilon=epsilon)
         _train = trainer.apply_gradients(grads)
 
         lr = Scheduler(v=lr, nvalues=total_timesteps, schedule=lrschedule)
@@ -103,8 +103,9 @@ class Runner(object):
             self.batch_ob_shape = (nenv * nsteps, nh, nw, nc * nstack)
             self.obs = np.zeros((nenv, nh, nw, nc * nstack), dtype=np.uint8)
         else:
+            # Assume flat input from environment.
             self.batch_ob_shape = (nenv * nsteps,) + env.observation_space.shape
-            self.obs = np.zeros((nenv,) + env.observation_space.shape)
+            self.obs = np.zeros((nenv,) + env.observation_space.shape, dtype=np.float32)
 
         obs = env.reset()
         self.update_obs(obs)
@@ -179,8 +180,7 @@ def learn(policy, env, seed, nsteps=5, nstack=4, total_timesteps=int(80e6), vf_c
         max_grad_norm=max_grad_norm, lr=lr, alpha=alpha, epsilon=epsilon, total_timesteps=total_timesteps, lrschedule=lrschedule)
     runner = Runner(env, model, nsteps=nsteps, nstack=nstack, gamma=gamma)
 
-    sum_rewards = np.zeros((nenvs,))
-    episode_rewards = deque(maxlen=100)
+    stats = EpisodeStats(nsteps, nenvs, maxlen=100)
     nbatch = nenvs * nsteps
     tstart = time.time()
     for update in itertools.count():
@@ -188,12 +188,7 @@ def learn(policy, env, seed, nsteps=5, nstack=4, total_timesteps=int(80e6), vf_c
         policy_loss, value_loss, policy_entropy = model.train(obs, states, rewards, masks, actions, values)
         nseconds = time.time()-tstart
         fps = int((update*nbatch)/nseconds)
-        # reward bookkeeping. use inverted masks as proxy for raw reward
-        # TODO: fix this approximation where we consider a `done` anywhere in the rollout to be sufficient.
-        sum_rewards += np.sum(np.reshape(1-masks, (nenvs, nsteps)), axis=1)
-        reshaped_masks = np.reshape(masks, (nenvs, nsteps))
-        episode_rewards.extend(sum_rewards[np.any(reshaped_masks, axis=1)])
-        sum_rewards[np.any(reshaped_masks, axis=1)] = 0
+        stats.feed(rewards, masks)
 
         if update % log_interval == 0 or update == 1:
             ev = explained_variance(values, rewards)
@@ -203,10 +198,11 @@ def learn(policy, env, seed, nsteps=5, nstack=4, total_timesteps=int(80e6), vf_c
             logger.record_tabular("policy_entropy", float(policy_entropy))
             logger.record_tabular("value_loss", float(value_loss))
             logger.record_tabular("explained_variance", float(ev))
-            logger.record_tabular("mean episode reward", np.mean(episode_rewards))
+            logger.record_tabular("mean episode reward", stats.mean_length())
+
             logger.dump_tabular()
 
-            if np.mean(episode_rewards) >= 195:
+            if stats.mean_length() >= 195:
                 break
     env.close()
 
