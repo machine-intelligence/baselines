@@ -28,7 +28,6 @@ class Model(object):
                                 inter_op_parallelism_threads=num_procs)
         config.gpu_options.allow_growth = True
         sess = tf.Session(config=config)
-        nact = ac_space.n
         nbatch = nenvs*nsteps
 
         A = tf.placeholder(tf.int32, [nbatch])
@@ -66,11 +65,11 @@ class Model(object):
             if states != []:
                 td_map[train_model.S] = states
                 td_map[train_model.M] = masks
-            policy_loss, value_loss, policy_entropy, _ = sess.run(
-                [pg_loss, vf_loss, entropy, _train],
+            total_loss, policy_loss, value_loss, policy_entropy, _ = sess.run(
+                [loss, pg_loss, vf_loss, entropy, _train],
                 td_map
             )
-            return policy_loss, value_loss, policy_entropy
+            return total_loss, policy_loss, value_loss, policy_entropy
 
         def save(save_path):
             ps = sess.run(params)
@@ -190,7 +189,7 @@ def learn(policy, env, seed, nsteps=5, nstack=4, total_timesteps=int(80e6), vf_c
     tstart = time.time()
     for update in itertools.count():
         obs, states, rewards, masks, actions, values = runner.run()
-        policy_loss, value_loss, policy_entropy = model.train(obs, states, rewards, masks, actions, values)
+        total_loss, policy_loss, value_loss, policy_entropy = model.train(obs, states, rewards, masks, actions, values)
         nseconds = time.time()-tstart
         fps = int((update*nbatch)/nseconds)
         stats.feed(rewards, masks)
@@ -202,6 +201,7 @@ def learn(policy, env, seed, nsteps=5, nstack=4, total_timesteps=int(80e6), vf_c
             logger.record_tabular("fps", fps)
             logger.record_tabular("policy_entropy", float(policy_entropy))
             logger.record_tabular("value_loss", float(value_loss))
+            logger.record_tabular("total_loss", float(total_loss))
             logger.record_tabular("explained_variance", float(ev))
             logger.record_tabular("mean_episode_length", stats.mean_length())
             logger.record_tabular("mean_episode_reward", stats.mean_reward())
