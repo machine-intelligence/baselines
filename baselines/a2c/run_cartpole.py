@@ -34,12 +34,12 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu):
         policy_fn = LstmPolicy
     elif policy == 'lnlstm':
         policy_fn = LnLstmPolicy
-    learn(policy_fn, env, seed, total_timesteps=num_timesteps, lrschedule=lrschedule)
+    learn(policy_fn, env, seed, nsteps=6, nstack=2, total_timesteps=num_timesteps, lrschedule=lrschedule, max_episode_length=195)
     env.close()
 
 
 def main():
-    train('CartPole-v0', num_timesteps=int(2e6), seed=0, policy='fc', lrschedule='linear', num_cpu=8)
+    train('CartPole-v0', num_timesteps=int(2e6), seed=1337, policy='fc', lrschedule='linear', num_cpu=8)
 
 
 if __name__ == '__main__':
