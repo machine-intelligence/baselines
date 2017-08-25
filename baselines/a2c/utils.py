@@ -185,12 +185,12 @@ class Scheduler(object):
 
 
 class EpisodeStats:
-    def __init__(self, nsteps, nenvs):
+    def __init__(self, nsteps, nenvs, maxlen=40):
         self.episode_rewards = []
         for i in range(nenvs):
             self.episode_rewards.append([])
-        self.lenbuffer = deque(maxlen=40)  # rolling buffer for episode lengths
-        self.rewbuffer = deque(maxlen=40)  # rolling buffer for episode rewards
+        self.lenbuffer = deque(maxlen=maxlen)  # rolling buffer for episode lengths
+        self.rewbuffer = deque(maxlen=maxlen)  # rolling buffer for episode rewards
         self.nsteps = nsteps
         self.nenvs = nenvs
 
