@@ -186,9 +186,7 @@ class Scheduler(object):
 
 class EpisodeStats:
     def __init__(self, nsteps, nenvs, maxlen=40):
-        self.episode_rewards = []
-        for i in range(nenvs):
-            self.episode_rewards.append([])
+        self.episode_rewards = [[] for _ in range(nenvs)]
         self.lenbuffer = deque(maxlen=maxlen)  # rolling buffer for episode lengths
         self.rewbuffer = deque(maxlen=maxlen)  # rolling buffer for episode rewards
         self.nsteps = nsteps
@@ -197,8 +195,8 @@ class EpisodeStats:
     def feed(self, rewards, masks):
         rewards = np.reshape(rewards, [self.nenvs, self.nsteps])
         masks = np.reshape(masks, [self.nenvs, self.nsteps])
-        for i in range(0, self.nenvs):
-            for j in range(0, self.nsteps):
+        for i in range(self.nenvs):
+            for j in range(self.nsteps):
                 self.episode_rewards[i].append(rewards[i][j])
                 if masks[i][j]:
                     l = len(self.episode_rewards[i])
