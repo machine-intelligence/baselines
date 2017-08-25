@@ -195,5 +195,8 @@ class DownsampleWrapper(gym.ObservationWrapper):
             old_shape[0] // scale, old_shape[1] // scale, 1))
 
     def _observation(self, obs):
-        return np.uint8(
-            resize(np.mean(obs, axis=-1), (obs.shape[0] // self.scale, obs.shape[1] // self.scale), mode='edge'))
+        return np.expand_dims(
+            np.uint8(
+                resize(np.mean(obs, axis=-1), (obs.shape[0] // self.scale, obs.shape[1] // self.scale), mode='edge')),
+            axis=-1)
+
