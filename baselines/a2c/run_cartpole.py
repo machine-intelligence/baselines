@@ -15,8 +15,9 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu):
         def _thunk():
             env = gym.make(env_id)
             env.seed(seed + rank)
-            env = RenderWrapper(env, 400, 600)
-            env = DownsampleWrapper(env, 4)
+            if policy == 'cnn':
+                env = RenderWrapper(env, 400, 600)
+                env = DownsampleWrapper(env, 4)
             #env = bench.Monitor(env, os.path.join(logger.get_dir(), "{}.monitor.json".format(rank)))
             gym.logger.setLevel(logging.WARN)
             return env
@@ -34,12 +35,15 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu):
         policy_fn = LstmPolicy
     elif policy == 'lnlstm':
         policy_fn = LnLstmPolicy
-    learn(policy_fn, env, seed, nsteps=6, nstack=1, total_timesteps=num_timesteps, lrschedule=lrschedule, max_episode_length=195)
+    learn(policy_fn, env, seed, nsteps=5, nstack=1, total_timesteps=num_timesteps, lrschedule=lrschedule, max_episode_length=195)
     env.close()
 
 
 def main():
-    train('CartPole-v0', num_timesteps=int(8e6), seed=1337, policy='cnn', lrschedule='linear', num_cpu=8)
+    # TODO: make this a clf
+    policy = 'cnn'
+    train('CartPole-v0', num_timesteps=int(8e6), seed=0, policy=policy,
+          lrschedule='linear', num_cpu=8)
 
 
 if __name__ == '__main__':
