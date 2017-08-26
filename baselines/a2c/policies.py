@@ -98,8 +98,9 @@ class FcPolicy(object):
         X = tf.placeholder(tf.float32, ob_shape)
         with tf.variable_scope("model", reuse=reuse):
             if USE_KERAS:
-                h1 = Dense(64, activation='relu', name='fc1')(X)
-                h2 = Dense(64, activation='relu', name='fc2')(h1)
+                h1 = Dense(64, activation='selu', name='fc1')(X)
+                h2 = Dense(64, activation='selu', name='fc2')(h1)
+                h2 = Dense(64, activation='selu', name='fc2')(h2)
                 pi = Dense(nact, name='pi')(h2)
                 vf = Dense(1, name='v')(h2)
             else:
@@ -125,7 +126,7 @@ class FcPolicy(object):
         self.step = step
         self.value = value
 
-USE_KERAS = False
+USE_KERAS = True
 class CnnPolicy(object):
 
     def __init__(self, sess, ob_space, ac_space, nenv, nsteps, nstack, reuse=False):
@@ -135,11 +136,14 @@ class CnnPolicy(object):
         X = tf.placeholder(tf.uint8, ob_shape) #obs
         with tf.variable_scope("model", reuse=reuse):
             if USE_KERAS:
-                h = Conv2D(filters=32, kernel_size=8, strides=4, activation='relu', name='c1')(tf.cast(X, tf.float32)/255.)
-                h2 = Conv2D(64, 4, 2, activation='relu', name='c2')(h)
-                h3 = Conv2D(64, 3, 1, activation='relu', name='c3')(h2)
-                h3 = Flatten()(h3)
-                h5 = Dense(512, activation='relu', name='fc1')(h3)
+                x = Conv2D(filters=64, kernel_size=8, strides=4, activation='relu', name='c1')(tf.cast(X, tf.float32)/255.)
+                x = Conv2D(64, kernel_size=4, strides=2, activation='relu', name='c2')(x)
+                x = Conv2D(64, kernel_size=3, strides=2, activation='relu', name='c3')(x)
+                #x = Conv2D(64, kernel_size=3, strides=2, activation='relu', name='c4')(x)
+                x = Conv2D(64, kernel_size=1, strides=1, activation='relu', name='c5')(x)
+                x = Flatten()(x)
+                h5 = Dense(64, activation='relu', name='fc1')(x)
+                #h5 = Dense(64, activation='selu', name='fc2')(h5)
                 pi = Dense(nact, name='pi')(h5)
                 vf = Dense(1, name='v')(h5)
             else:
