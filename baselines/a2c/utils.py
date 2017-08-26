@@ -10,6 +10,7 @@ def sample(logits):
     return tf.argmax(logits - tf.log(-tf.log(noise)), 1)
 
 def cat_entropy(logits):
+    """More computationally stable than softmax followed by entropy."""
     a0 = logits - tf.reduce_max(logits, 1, keep_dims=True)
     ea0 = tf.exp(a0)
     z0 = tf.reduce_sum(ea0, 1, keep_dims=True)
