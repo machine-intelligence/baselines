@@ -26,7 +26,6 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu):
     set_global_seeds(seed)
     env = SubprocVecEnv([make_env(i) for i in range(num_cpu)])
 
-    logger.configure()
     if policy == 'fc':
         policy_fn = FcPolicy
     if policy == 'cnn':
