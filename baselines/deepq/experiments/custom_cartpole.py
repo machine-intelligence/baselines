@@ -20,7 +20,7 @@ class EncodeWrapper(gym.ObservationWrapper):
     def __init__(self, env):
         """Buffer observations and stack across channels (last axis)."""
         gym.Wrapper.__init__(self, env)
-        self.model = load_model('autoencoder3.h5')
+        self.model = load_model('autoencoder4.h5')
 
         self.encoder_model = Model(self.model.input, self.model.get_layer('bottleneck').output, name='encoder')
 
@@ -30,15 +30,17 @@ class EncodeWrapper(gym.ObservationWrapper):
 
 
     def _observation(self, obs):
+        # Put framestack at the end
+        obs = np.moveaxis(obs, -1, 0)
+        # Preprocess
         obs = 1 - obs[..., :96, :144, :] / 255.
-        obs = np.moveaxis(obs, -1, 0)[..., None]
-
         return np.concatenate(self.encoder_model.predict(
             [np.stack([obs, obs]),
              np.identity(self.action_space.n)]))
 
 # TODO: make this a commandline arg
 FROM_PIXELS = False
+USE_ENCODER = True
 def model(inpt, num_actions, scope, reuse=False):
     """This model takes as input an observation and returns values of all actions."""
     with tf.variable_scope(scope, reuse=reuse):
@@ -49,7 +51,6 @@ def model(inpt, num_actions, scope, reuse=False):
 
 
 if __name__ == '__main__':
-    logger.configure()
     if FROM_PIXELS:
         model = deepq.models.cnn_to_mlp(
             convs=[(32, 8, 4), (64, 4, 2), (64, 3, 1)],
@@ -60,11 +61,12 @@ if __name__ == '__main__':
     with U.make_session(8):
         # Create the environment
         env = gym.make("CartPole-v0")
-        if FROM_PIXELS:
+        if FROM_PIXELS or USE_ENCODER:
             env = RenderWrapper(env, 400, 600)
             env = DownsampleWrapper(env, 4)
             env = FrameStack(env, 4)
-            #env = EncodeWrapper(env)
+            if USE_ENCODER:
+                env = EncodeWrapper(env)
         # Create all the functions necessary to train the model
         act, train, update_target, debug = deepq.build_train(
             make_obs_ph=lambda name: U.BatchInput(env.observation_space.shape, name=name),
