@@ -20,7 +20,7 @@ class EncodeWrapper(gym.ObservationWrapper):
     def __init__(self, env):
         """Buffer observations and stack across channels (last axis)."""
         gym.Wrapper.__init__(self, env)
-        self.model = load_model('autoencoder.h5')
+        self.model = load_model('autoencoder3.h5')
 
         self.encoder_model = Model(self.model.input, self.model.get_layer('bottleneck').output, name='encoder')
 
@@ -32,9 +32,10 @@ class EncodeWrapper(gym.ObservationWrapper):
     def _observation(self, obs):
         obs = 1 - obs[..., :96, :144, :] / 255.
         obs = np.moveaxis(obs, -1, 0)[..., None]
+
         return np.concatenate(self.encoder_model.predict(
             [np.stack([obs, obs]),
-             np.arange(self.action_space.n)]))
+             np.identity(self.action_space.n)]))
 
 # TODO: make this a commandline arg
 FROM_PIXELS = False
