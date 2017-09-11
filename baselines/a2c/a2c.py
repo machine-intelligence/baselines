@@ -18,6 +18,8 @@ from baselines.a2c.utils import Scheduler, make_path, find_trainable_variables, 
 from baselines.a2c.policies import CnnPolicy
 from baselines.a2c.utils import cat_entropy, mse
 
+from keras.models import Model as keras_model, load_model
+
 class Model(object):
 
     def __init__(self, policy, ob_space, ac_space, nenvs, nsteps, nstack, num_procs,
@@ -93,19 +95,37 @@ class Model(object):
         self.load = load
         tf.global_variables_initializer().run(session=sess)
 
+
 class Runner(object):
 
     def __init__(self, env, model, nsteps=5, nstack=4, gamma=0.99):
         self.env = env
         self.model = model
         nenv = env.num_envs
+
+        # TODO: make this a parameter
+        use_encoder = True
+        if use_encoder:
+            autoencoder_model = load_model('autoencoder4.h5')
+            for layer in autoencoder_model.layers:
+                layer.trainable = False
+            self.encoder_model = keras_model(autoencoder_model.input, autoencoder_model.get_layer('bottleneck').output)
+        else:
+            self.encoder_model = None
+
         self.from_pixels = len(env.observation_space.shape) == 3
         if self.from_pixels:
             nh, nw, nc = env.observation_space.shape
-            self.batch_ob_shape = (nenv * nsteps, nh, nw, nc * nstack)
-            self.obs = np.zeros((nenv, nh, nw, nc * nstack), dtype=np.uint8)
+            self.raw_obs = np.zeros((nenv, nh, nw, nc * nstack), dtype=np.uint8)
+            if self.encoder_model:
+                output_size = self.encoder_model.output_shape[1]
+                self.obs = np.zeros((nenv, output_size), dtype=np.float32)
+                self.batch_ob_shape = (nenv * nsteps,) + (output_size*env.action_space.n,)
+            else:
+                self.obs = self.raw_obs
+                self.batch_ob_shape = (nenv * nsteps, nh, nw, nc * nstack)
+
         else:
-            # Assume flat input from environment.
             self.batch_ob_shape = (nenv * nsteps,) + env.observation_space.shape
             self.obs = np.zeros((nenv,) + env.observation_space.shape, dtype=np.float32)
 
@@ -116,14 +136,35 @@ class Runner(object):
         self.states = model.initial_state
         self.dones = [False for _ in range(nenv)]
 
+
+
     def update_obs(self, obs):
         if not self.from_pixels:
             self.obs = obs
             return
         # Do frame-stacking here instead of the FrameStack wrapper to reduce
         # IPC overhead
-        self.obs = np.roll(self.obs, shift=-1, axis=3)
-        self.obs[:, :, :, -1] = obs[:, :, :, 0]
+        self.raw_obs = np.roll(self.raw_obs, shift=-1, axis=3)
+        self.raw_obs[:, :, :, -1] = obs[:, :, :, 0]
+        if self.encoder_model:
+            n_actions = self.env.action_space.n
+            # process raw_obs to generate obs
+            # (2, 100, 150, 4)
+            # Keras expects stack dimension 2nd and empty channel last.
+            tmp = np.moveaxis(self.raw_obs, -1, 1)
+            tmp = np.expand_dims(tmp, -1)
+            tmp = 1 - tmp[..., :96, :144, :] / 255.
+            size = tmp.shape[0]
+            tmp = self.encoder_model.predict(
+                [np.vstack((tmp,)*n_actions),
+                 # Take both actions for each item in the batch
+                 np.repeat(np.identity(n_actions), (size,)*n_actions, axis=0)])
+            # Reconstruct original batch by cat'ing the actions to each other
+            tmp = np.concatenate(np.split(tmp, n_actions), axis=1)
+            self.obs = tmp
+        else:
+            self.obs = self.raw_obs
+
 
     def run(self):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones = [],[],[],[],[]
@@ -145,6 +186,7 @@ class Runner(object):
         mb_dones.append(self.dones)
         #batch of steps to batch of rollouts
         if self.from_pixels:
+            # (nstep, nenv, 100, 150, nstack) before below
             mb_obs = np.asarray(mb_obs, dtype=np.uint8).swapaxes(1, 0).reshape(self.batch_ob_shape)
         else:
             mb_obs = np.asarray(mb_obs, dtype=np.float32).swapaxes(1, 0).reshape(self.batch_ob_shape)
@@ -212,5 +254,3 @@ def learn(policy, env, seed, nsteps=5, nstack=4, total_timesteps=int(80e6), vf_c
                 break
     env.close()
 
-if __name__ == '__main__':
-    main()

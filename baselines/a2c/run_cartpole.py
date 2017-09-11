@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 import os, logging, gym
+import numpy as np
+from gym import spaces
 from keras.models import Model, load_model
 from baselines import logger
 from baselines.common import set_global_seeds
 from baselines import bench
 from baselines.a2c.a2c import learn
 from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
-from baselines.common.atari_wrappers import DownsampleWrapper, RenderWrapper
+from baselines.common.atari_wrappers import DownsampleWrapper, RenderWrapper, FrameStack
 from baselines.a2c.policies import CnnPolicy, LstmPolicy, LnLstmPolicy, FcPolicy
 
 
@@ -25,9 +27,10 @@ class EncodeWrapper(gym.ObservationWrapper):
         self.observation_space = spaces.Box(low=-3e38, high=3e38, shape=shape)
 
     def _observation(self, obs):
+        # Put framestack at the end
+        obs = np.moveaxis(obs, -1, 0)
+        # Preprocess
         obs = 1 - obs[..., :96, :144, :] / 255.
-        obs = np.moveaxis(obs, -1, 0)[..., None]
-
         return np.concatenate(self.encoder_model.predict(
             [np.stack([obs, obs]),
              np.identity(self.action_space.n)]))
@@ -39,10 +42,10 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu):
         def _thunk():
             env = gym.make(env_id)
             env.seed(seed + rank)
-            if policy == 'cnn':
-                env = RenderWrapper(env, 400, 600)
-                env = DownsampleWrapper(env, 4)
-                env = EncodeWrapper(env)
+            env = RenderWrapper(env, 400, 600)
+            env = DownsampleWrapper(env, 4)
+            #env = FrameStack(env, 4)
+            #env = EncodeWrapper(env)
             #env = bench.Monitor(env, os.path.join(logger.get_dir(), "{}.monitor.json".format(rank)))
             gym.logger.setLevel(logging.WARN)
             return env
@@ -59,7 +62,7 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu):
         policy_fn = LstmPolicy
     elif policy == 'lnlstm':
         policy_fn = LnLstmPolicy
-    learn(policy_fn, env, seed, nsteps=5, nstack=1, total_timesteps=num_timesteps, lrschedule=lrschedule, max_episode_length=195)
+    learn(policy_fn, env, seed, nsteps=5, nstack=4, total_timesteps=num_timesteps, lrschedule=lrschedule, max_episode_length=195)
     env.close()
 
 
