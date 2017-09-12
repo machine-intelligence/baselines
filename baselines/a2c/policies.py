@@ -137,11 +137,13 @@ class FlatLstmPolicy(object):
         M = tf.placeholder(tf.float32, [nbatch])  # mask (done t-1)
         S = tf.placeholder(tf.float32, [nenv, nlstm * 2])  # states
         with tf.variable_scope("model", reuse=reuse):
-            #h4 = fc(X, 'fc1', nh=512, init_scale=np.sqrt(2))
-            xs = batch_to_seq(X, nenv, nsteps)
+            h4 = fc(X, 'fc1', nh=128, init_scale=np.sqrt(2))
+            xs = batch_to_seq(h4, nenv, nsteps)
             ms = batch_to_seq(M, nenv, nsteps)
+            #h5, snew = lnlstm(xs, ms, S, 'lstm1', nh=nlstm)
             h5, snew = lstm(xs, ms, S, 'lstm1', nh=nlstm)
             h5 = seq_to_batch(h5)
+            h5 = fc(h5, 'fc2', 64)
             pi = fc(h5, 'pi', nact, act=lambda x: x)
             vf = fc(h5, 'v', 1, act=lambda x: x)
 
