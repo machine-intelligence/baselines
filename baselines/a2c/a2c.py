@@ -35,10 +35,13 @@ class Model(object):
         R = tf.placeholder(tf.float32, [nbatch])
         LR = tf.placeholder(tf.float32, [])
 
-        #step_model = policy(sess, ob_space, ac_space, nenvs, 1, nstack, reuse=False)
-        train_model = policy(sess, ob_space, ac_space, nenvs, nsteps, nstack, reuse=True)
-        # uncomment this and comment above `step_model =` when using keras-based models
-        step_model = train_model
+        use_keras = False
+        if use_keras:
+            train_model = policy(sess, ob_space, ac_space, nenvs, nsteps, nstack, reuse=True)
+            step_model = train_model
+        else:
+            step_model = policy(sess, ob_space, ac_space, nenvs, 1, nstack, reuse=False)
+            train_model = policy(sess, ob_space, ac_space, nenvs, nsteps, nstack, reuse=True)
 
         neglogpac = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=train_model.pi, labels=A)
         pg_loss = tf.reduce_mean(ADV * neglogpac)

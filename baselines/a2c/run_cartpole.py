@@ -11,7 +11,7 @@ from baselines import bench
 from baselines.a2c.a2c import learn
 from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines.common.atari_wrappers import DownsampleWrapper, RenderWrapper, FrameStack
-from baselines.a2c.policies import CnnPolicy, LstmPolicy, LnLstmPolicy, FcPolicy
+from baselines.a2c.policies import CnnPolicy, LstmPolicy, LnLstmPolicy, FcPolicy, FlatLstmPolicy
 
 NUM_THREADS = 8
 MODEL_FILE = 'autoencoder5.h5'
@@ -118,13 +118,15 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu):
         policy_fn = LstmPolicy
     elif policy == 'lnlstm':
         policy_fn = LnLstmPolicy
-    learn(policy_fn, env, seed, nsteps=5, nstack=3, total_timesteps=num_timesteps, lrschedule=lrschedule, max_episode_length=195)
+    elif policy == 'flatlstm':
+        policy_fn = FlatLstmPolicy
+    learn(policy_fn, env, seed, nsteps=5, nstack=1, total_timesteps=num_timesteps, lrschedule=lrschedule, max_episode_length=195)
     env.close()
 
 
 def main():
     # TODO: make this a clf
-    policy = 'fc'
+    policy = 'flatlstm'
 
     train('CartPole-v0', num_timesteps=int(8e6), seed=1337, policy=policy,
           lrschedule='linear', num_cpu=NUM_THREADS)

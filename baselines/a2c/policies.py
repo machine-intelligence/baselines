@@ -126,6 +126,45 @@ class FcPolicy(object):
         self.step = step
         self.value = value
 
+class FlatLstmPolicy(object):
+    """LSTM that expects input to be flat."""
+
+    def __init__(self, sess, ob_space, ac_space, nenv, nsteps, nstack, nlstm=256, reuse=False):
+        nbatch = nenv * nsteps
+        ob_shape = (nbatch, ob_space.shape[0] * nstack)
+        nact = ac_space.n
+        X = tf.placeholder(tf.float32, ob_shape)  # obs
+        M = tf.placeholder(tf.float32, [nbatch])  # mask (done t-1)
+        S = tf.placeholder(tf.float32, [nenv, nlstm * 2])  # states
+        with tf.variable_scope("model", reuse=reuse):
+            #h4 = fc(X, 'fc1', nh=512, init_scale=np.sqrt(2))
+            xs = batch_to_seq(X, nenv, nsteps)
+            ms = batch_to_seq(M, nenv, nsteps)
+            h5, snew = lstm(xs, ms, S, 'lstm1', nh=nlstm)
+            h5 = seq_to_batch(h5)
+            pi = fc(h5, 'pi', nact, act=lambda x: x)
+            vf = fc(h5, 'v', 1, act=lambda x: x)
+
+        v0 = vf[:, 0]
+        a0 = sample(pi)
+        self.initial_state = np.zeros((nenv, nlstm * 2), dtype=np.float32)
+
+        def step(ob, state, mask):
+            a, v, s = sess.run([a0, v0, snew], {X: ob, S: state, M: mask})
+            return a, v, s
+
+        def value(ob, state, mask):
+            return sess.run(v0, {X: ob, S: state, M: mask})
+
+        self.X = X
+        self.M = M
+        self.S = S
+        self.pi = pi
+        self.vf = vf
+        self.step = step
+        self.value = value
+
+
 USE_KERAS = True
 class CnnPolicy(object):
 
