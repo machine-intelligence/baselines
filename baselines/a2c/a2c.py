@@ -18,8 +18,6 @@ from baselines.a2c.utils import Scheduler, make_path, find_trainable_variables, 
 from baselines.a2c.policies import CnnPolicy
 from baselines.a2c.utils import cat_entropy, mse
 
-from keras.models import Model as keras_model, load_model
-
 class Model(object):
 
     def __init__(self, policy, ob_space, ac_space, nenvs, nsteps, nstack, num_procs,
@@ -103,27 +101,11 @@ class Runner(object):
         self.model = model
         nenv = env.num_envs
 
-        # TODO: make this a parameter
-        use_encoder = True
-        if use_encoder:
-            autoencoder_model = load_model('autoencoder4.h5')
-            for layer in autoencoder_model.layers:
-                layer.trainable = False
-            self.encoder_model = keras_model(autoencoder_model.input, autoencoder_model.get_layer('bottleneck').output)
-        else:
-            self.encoder_model = None
-
         self.from_pixels = len(env.observation_space.shape) == 3
         if self.from_pixels:
             nh, nw, nc = env.observation_space.shape
-            self.raw_obs = np.zeros((nenv, nh, nw, nc * nstack), dtype=np.uint8)
-            if self.encoder_model:
-                output_size = self.encoder_model.output_shape[1]
-                self.obs = np.zeros((nenv, output_size), dtype=np.float32)
-                self.batch_ob_shape = (nenv * nsteps,) + (output_size*env.action_space.n,)
-            else:
-                self.obs = self.raw_obs
-                self.batch_ob_shape = (nenv * nsteps, nh, nw, nc * nstack)
+            self.obs = np.zeros((nenv, nh, nw, nc * nstack), dtype=np.uint8)
+            self.batch_ob_shape = (nenv * nsteps, nh, nw, nc * nstack)
 
         else:
             self.batch_ob_shape = (nenv * nsteps,) + env.observation_space.shape
@@ -136,35 +118,14 @@ class Runner(object):
         self.states = model.initial_state
         self.dones = [False for _ in range(nenv)]
 
-
-
     def update_obs(self, obs):
         if not self.from_pixels:
             self.obs = obs
             return
         # Do frame-stacking here instead of the FrameStack wrapper to reduce
         # IPC overhead
-        self.raw_obs = np.roll(self.raw_obs, shift=-1, axis=3)
-        self.raw_obs[:, :, :, -1] = obs[:, :, :, 0]
-        if self.encoder_model:
-            n_actions = self.env.action_space.n
-            # process raw_obs to generate obs
-            # (2, 100, 150, 4)
-            # Keras expects stack dimension 2nd and empty channel last.
-            tmp = np.moveaxis(self.raw_obs, -1, 1)
-            tmp = np.expand_dims(tmp, -1)
-            tmp = 1 - tmp[..., :96, :144, :] / 255.
-            size = tmp.shape[0]
-            tmp = self.encoder_model.predict(
-                [np.vstack((tmp,)*n_actions),
-                 # Take both actions for each item in the batch
-                 np.repeat(np.identity(n_actions), (size,)*n_actions, axis=0)])
-            # Reconstruct original batch by cat'ing the actions to each other
-            tmp = np.concatenate(np.split(tmp, n_actions), axis=1)
-            self.obs = tmp
-        else:
-            self.obs = self.raw_obs
-
+        self.obs = np.roll(self.raw_obs, shift=-1, axis=3)
+        self.obs[:, :, :, -1] = obs[:, :, :, 0]
 
     def run(self):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones = [],[],[],[],[]
