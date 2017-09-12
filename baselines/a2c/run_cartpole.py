@@ -14,6 +14,7 @@ from baselines.common.atari_wrappers import DownsampleWrapper, RenderWrapper, Fr
 from baselines.a2c.policies import CnnPolicy, LstmPolicy, LnLstmPolicy, FcPolicy
 
 NUM_THREADS = 8
+MODEL_FILE = 'autoencoder5.h5'
 
 def get_session(gpu_fraction=0.08):
     """Force tensorflow not to take up the whole GPU on every thread.
@@ -27,13 +28,13 @@ def get_session(gpu_fraction=0.08):
 
 
 class ImagineWrapper(gym.ObservationWrapper):
-    """Load pre-trained environment model and use it to encode each observation."""
+    """Load pre-trained environment model and use it to predict next frames."""
 
     def __init__(self, env):
         """Buffer observations and stack across channels (last axis)."""
         gym.Wrapper.__init__(self, env)
         KTF.set_session(get_session())
-        self.model = load_model('autoencoder4.h5')
+        self.model = load_model(MODEL_FILE)
 
         # take all actions as a batch, skip model batch dim
         shape = tuple(self.model.output.shape.as_list()[2:-1]) + (self.action_space.n,)
@@ -60,7 +61,7 @@ class EncodeWrapper(gym.ObservationWrapper):
         """Buffer observations and stack across channels (last axis)."""
         gym.Wrapper.__init__(self, env)
         KTF.set_session(get_session())
-        self.model = load_model('autoencoder4.h5')
+        self.model = load_model(MODEL_FILE)
 
         self.encoder_model = Model(self.model.input, self.model.get_layer('bottleneck').output, name='encoder')
 
@@ -86,8 +87,9 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu):
             env.seed(seed + rank)
             env = RenderWrapper(env, 400, 600)
             env = DownsampleWrapper(env, 4)
-            env = FrameStack(env, 4)
-            env = ImagineWrapper(env)
+            env = FrameStack(env, 3)
+            env = EncodeWrapper(env)
+            #env = ImagineWrapper(env)
             #env = bench.Monitor(env, os.path.join(logger.get_dir(), "{}.monitor.json".format(rank)))
             gym.logger.setLevel(logging.WARN)
             return env
@@ -104,13 +106,13 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu):
         policy_fn = LstmPolicy
     elif policy == 'lnlstm':
         policy_fn = LnLstmPolicy
-    learn(policy_fn, env, seed, nsteps=5, nstack=1, total_timesteps=num_timesteps, lrschedule=lrschedule, max_episode_length=195)
+    learn(policy_fn, env, seed, nsteps=5, nstack=3, total_timesteps=num_timesteps, lrschedule=lrschedule, max_episode_length=195)
     env.close()
 
 
 def main():
     # TODO: make this a clf
-    policy = 'cnn'
+    policy = 'fc'
 
     train('CartPole-v0', num_timesteps=int(8e6), seed=1337, policy=policy,
           lrschedule='linear', num_cpu=NUM_THREADS)
