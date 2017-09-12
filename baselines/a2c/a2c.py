@@ -108,19 +108,25 @@ class Runner(object):
             self.batch_ob_shape = (nenv * nsteps, nh, nw, nc * nstack)
 
         else:
-            self.batch_ob_shape = (nenv * nsteps,) + env.observation_space.shape
-            self.obs = np.zeros((nenv,) + env.observation_space.shape, dtype=np.float32)
+            self.batch_ob_shape = (nenv * nsteps,) + (env.observation_space.shape[0] * nstack,)
+            self.obs = np.zeros((nenv,) + (env.observation_space.shape[0] * nstack,), dtype=np.float32)
 
-        obs = env.reset()
-        self.update_obs(obs)
         self.gamma = gamma
         self.nsteps = nsteps
+        self.nstack = nstack
         self.states = model.initial_state
         self.dones = [False for _ in range(nenv)]
+        obs = env.reset()
+        self.update_obs(obs)
 
     def update_obs(self, obs):
         if not self.from_pixels:
-            self.obs = obs
+            if self.nstack == 1:
+                self.obs = obs
+            else:
+                obs_size = self.env.observation_space.shape[0]
+                self.obs = np.roll(self.obs, shift=obs_size, axis=-1)
+                self.obs[:, -obs_size:] = obs
             return
         # Do frame-stacking here instead of the FrameStack wrapper to reduce
         # IPC overhead

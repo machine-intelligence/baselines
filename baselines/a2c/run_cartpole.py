@@ -78,6 +78,17 @@ class EncodeWrapper(gym.ObservationWrapper):
             [np.stack((obs,) * self.action_space.n),
              np.identity(self.action_space.n)]))
 
+class StaticWrapper(gym.ObservationWrapper):
+        """Take only position and angle observations."""
+
+        def __init__(self, env):
+            """Buffer observations and stack across channels (last axis)."""
+            gym.Wrapper.__init__(self, env)
+            self.observation_space = spaces.Box(low=-3e38, high=3e38, shape=(2,))
+
+        def _observation(self, obs):
+            return obs[::2]
+
 def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu):
     num_timesteps //= 4
 
@@ -85,10 +96,11 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu):
         def _thunk():
             env = gym.make(env_id)
             env.seed(seed + rank)
-            env = RenderWrapper(env, 400, 600)
-            env = DownsampleWrapper(env, 4)
-            env = FrameStack(env, 3)
-            env = EncodeWrapper(env)
+            env = StaticWrapper(env)
+            #env = RenderWrapper(env, 400, 600)
+            #env = DownsampleWrapper(env, 4)
+            #env = FrameStack(env, 3)
+            #env = EncodeWrapper(env)
             #env = ImagineWrapper(env)
             #env = bench.Monitor(env, os.path.join(logger.get_dir(), "{}.monitor.json".format(rank)))
             gym.logger.setLevel(logging.WARN)

@@ -93,7 +93,7 @@ class FcPolicy(object):
     """Fully connected NN. Expects input to be flat."""
 
     def __init__(self, sess, ob_space, ac_space, nenv, nsteps, nstack, reuse=False):
-        ob_shape = (None if USE_KERAS else nenv*nsteps,) + ob_space.shape
+        ob_shape = (None if USE_KERAS else nenv*nsteps,) + (ob_space.shape[0] * nstack,)
         nact = ac_space.n
         X = tf.placeholder(tf.float32, ob_shape)
         with tf.variable_scope("model", reuse=reuse):
