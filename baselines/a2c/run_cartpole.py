@@ -13,10 +13,13 @@ from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines.common.atari_wrappers import DownsampleWrapper, RenderWrapper, FrameStack
 from baselines.a2c.policies import CnnPolicy, LstmPolicy, LnLstmPolicy, FcPolicy
 
-NUM_THREADS = 5
+NUM_THREADS = 8
 
-def get_session(gpu_fraction=0.1):
-    '''Force tensorflow not to take up the whole GPU on every thread.'''
+def get_session(gpu_fraction=0.08):
+    """Force tensorflow not to take up the whole GPU on every thread.
+
+    https://groups.google.com/forum/#!topic/keras-users/MFUEY9P1sc8
+    """
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_fraction)
     return tf.Session(config=tf.ConfigProto(
@@ -82,7 +85,7 @@ def main():
     # TODO: make this a clf
     policy = 'fc'
 
-    train('CartPole-v0', num_timesteps=int(8e6), seed=0, policy=policy,
+    train('CartPole-v0', num_timesteps=int(8e6), seed=1337, policy=policy,
           lrschedule='linear', num_cpu=NUM_THREADS)
 
 
