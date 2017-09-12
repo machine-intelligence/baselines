@@ -124,7 +124,7 @@ class Runner(object):
             return
         # Do frame-stacking here instead of the FrameStack wrapper to reduce
         # IPC overhead
-        self.obs = np.roll(self.raw_obs, shift=-1, axis=3)
+        self.obs = np.roll(self.obs, shift=-1, axis=3)
         self.obs[:, :, :, -1] = obs[:, :, :, 0]
 
     def run(self):
