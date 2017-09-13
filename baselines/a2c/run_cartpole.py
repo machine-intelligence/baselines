@@ -99,8 +99,8 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu):
             #env = StaticWrapper(env)
             env = RenderWrapper(env, 400, 600)
             env = DownsampleWrapper(env, 4)
-            env = FrameStack(env, 3)
-            env = EncodeWrapper(env)
+            #env = FrameStack(env, 3)
+            #env = EncodeWrapper(env)
             #env = ImagineWrapper(env)
             #env = bench.Monitor(env, os.path.join(logger.get_dir(), "{}.monitor.json".format(rank)))
             gym.logger.setLevel(logging.WARN)
@@ -126,7 +126,7 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu):
 
 def main():
     # TODO: make this a clf
-    policy = 'fc'
+    policy = 'cnn'
 
     train('CartPole-v0', num_timesteps=int(8e6), seed=1337, policy=policy,
           lrschedule='linear', num_cpu=NUM_THREADS)
