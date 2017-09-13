@@ -35,7 +35,7 @@ class Model(object):
         R = tf.placeholder(tf.float32, [nbatch])
         LR = tf.placeholder(tf.float32, [])
 
-        use_keras = False
+        use_keras = True
         if use_keras:
             train_model = policy(sess, ob_space, ac_space, nenvs, nsteps, nstack, reuse=True, use_keras=use_keras)
             step_model = train_model
@@ -54,8 +54,8 @@ class Model(object):
         if max_grad_norm is not None:
             grads, grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
         grads = list(zip(grads, params))
-        trainer = tf.train.RMSPropOptimizer(learning_rate=LR, decay=alpha, epsilon=epsilon)
-        #trainer = tf.train.AdamOptimizer()
+        #trainer = tf.train.RMSPropOptimizer(learning_rate=LR, decay=alpha, epsilon=epsilon)
+        trainer = tf.train.AdamOptimizer()
         _train = trainer.apply_gradients(grads)
 
         lr = Scheduler(v=lr, nvalues=total_timesteps, schedule=lrschedule)
