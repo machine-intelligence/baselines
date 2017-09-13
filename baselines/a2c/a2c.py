@@ -35,13 +35,13 @@ class Model(object):
         R = tf.placeholder(tf.float32, [nbatch])
         LR = tf.placeholder(tf.float32, [])
 
-        use_keras = True
+        use_keras = False
         if use_keras:
-            train_model = policy(sess, ob_space, ac_space, nenvs, nsteps, nstack, reuse=True)
+            train_model = policy(sess, ob_space, ac_space, nenvs, nsteps, nstack, reuse=True, use_keras=use_keras)
             step_model = train_model
         else:
-            step_model = policy(sess, ob_space, ac_space, nenvs, 1, nstack, reuse=False)
-            train_model = policy(sess, ob_space, ac_space, nenvs, nsteps, nstack, reuse=True)
+            step_model = policy(sess, ob_space, ac_space, nenvs, 1, nstack, reuse=False, use_keras=use_keras)
+            train_model = policy(sess, ob_space, ac_space, nenvs, nsteps, nstack, reuse=True, use_keras=use_keras)
 
         neglogpac = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=train_model.pi, labels=A)
         pg_loss = tf.reduce_mean(ADV * neglogpac)
@@ -54,8 +54,8 @@ class Model(object):
         if max_grad_norm is not None:
             grads, grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
         grads = list(zip(grads, params))
-        #trainer = tf.train.RMSPropOptimizer(learning_rate=LR, decay=alpha, epsilon=epsilon)
-        trainer = tf.train.AdamOptimizer()
+        trainer = tf.train.RMSPropOptimizer(learning_rate=LR, decay=alpha, epsilon=epsilon)
+        #trainer = tf.train.AdamOptimizer()
         _train = trainer.apply_gradients(grads)
 
         lr = Scheduler(v=lr, nvalues=total_timesteps, schedule=lrschedule)

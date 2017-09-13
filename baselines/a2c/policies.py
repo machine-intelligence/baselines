@@ -7,7 +7,7 @@ import baselines.common.tf_util as U
 import gym
 
 class LnLstmPolicy(object):
-    def __init__(self, sess, ob_space, ac_space, nenv, nsteps, nstack, nlstm=256, reuse=False):
+    def __init__(self, sess, ob_space, ac_space, nenv, nsteps, nstack, nlstm=256, reuse=False, use_keras=False):
         nbatch = nenv*nsteps
         nh, nw, nc = ob_space.shape
         ob_shape = (nbatch, nh, nw, nc*nstack)
@@ -49,7 +49,7 @@ class LnLstmPolicy(object):
 
 class LstmPolicy(object):
 
-    def __init__(self, sess, ob_space, ac_space, nenv, nsteps, nstack, nlstm=256, reuse=False):
+    def __init__(self, sess, ob_space, ac_space, nenv, nsteps, nstack, nlstm=256, reuse=False,use_keras=False):
         nbatch = nenv*nsteps
         nh, nw, nc = ob_space.shape
         ob_shape = (nbatch, nh, nw, nc*nstack)
@@ -92,12 +92,12 @@ class LstmPolicy(object):
 class FcPolicy(object):
     """Fully connected NN. Expects input to be flat."""
 
-    def __init__(self, sess, ob_space, ac_space, nenv, nsteps, nstack, reuse=False):
-        ob_shape = (None if USE_KERAS else nenv*nsteps,) + (ob_space.shape[0] * nstack,)
+    def __init__(self, sess, ob_space, ac_space, nenv, nsteps, nstack, reuse=False, use_keras=False):
+        ob_shape = (None if use_keras else nenv*nsteps,) + (ob_space.shape[0] * nstack,)
         nact = ac_space.n
         X = tf.placeholder(tf.float32, ob_shape)
         with tf.variable_scope("model", reuse=reuse):
-            if USE_KERAS:
+            if use_keras:
                 h1 = Dense(64, activation='selu', name='fc1')(X)
                 h2 = Dense(64, activation='selu', name='fc2')(h1)
                 h2 = Dense(64, activation='selu', name='fc2')(h2)
@@ -166,16 +166,15 @@ class FlatLstmPolicy(object):
         self.value = value
 
 
-USE_KERAS = True
 class CnnPolicy(object):
 
-    def __init__(self, sess, ob_space, ac_space, nenv, nsteps, nstack, reuse=False):
+    def __init__(self, sess, ob_space, ac_space, nenv, nsteps, nstack, reuse=False, use_keras=False):
         nh, nw, nc = ob_space.shape
-        ob_shape = (None if USE_KERAS else nenv*nsteps, nh, nw, nc*nstack)
+        ob_shape = (None if use_keras else nenv*nsteps, nh, nw, nc*nstack)
         nact = ac_space.n
         X = tf.placeholder(tf.uint8, ob_shape) #obs
         with tf.variable_scope("model", reuse=reuse):
-            if USE_KERAS:
+            if use_keras:
                 x = Conv2D(filters=64, kernel_size=8, strides=4, activation='relu', name='c1')(tf.cast(X, tf.float32)/255.)
                 x = Conv2D(64, kernel_size=4, strides=2, activation='relu', name='c2')(x)
                 x = Conv2D(64, kernel_size=3, strides=2, activation='relu', name='c3')(x)
