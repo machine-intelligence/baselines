@@ -35,7 +35,7 @@ class Model(object):
         R = tf.placeholder(tf.float32, [nbatch])
         LR = tf.placeholder(tf.float32, [])
 
-        use_keras = False
+        use_keras = True
         if use_keras:
             train_model = policy(sess, ob_space, ac_space, nenvs, nsteps, nstack, reuse=True)
             step_model = train_model

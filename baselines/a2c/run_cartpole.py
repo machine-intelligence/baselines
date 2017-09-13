@@ -120,13 +120,13 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu):
         policy_fn = LnLstmPolicy
     elif policy == 'flatlstm':
         policy_fn = FlatLstmPolicy
-    learn(policy_fn, env, seed, nsteps=5, nstack=1, total_timesteps=num_timesteps, lrschedule=lrschedule, max_episode_length=195)
+    learn(policy_fn, env, seed, nsteps=20, nstack=2, total_timesteps=num_timesteps, lrschedule=lrschedule, max_episode_length=195)
     env.close()
 
 
 def main():
     # TODO: make this a clf
-    policy = 'flatlstm'
+    policy = 'fc'
 
     train('CartPole-v0', num_timesteps=int(8e6), seed=1337, policy=policy,
           lrschedule='linear', num_cpu=NUM_THREADS)
